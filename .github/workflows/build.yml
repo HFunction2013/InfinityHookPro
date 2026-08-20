@@ -1,0 +1,71 @@
+name: Build InfinityHookPro
+
+# 仅在推送 build- 开头的标签时触发
+on:
+  push:
+    tags:
+      - 'build-*'
+
+jobs:
+  build:
+    name: Build ${{ matrix.configuration }} ${{ matrix.platform }}
+    runs-on: windows-2022
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release, Debug]
+        platform: [x64]
+
+    steps:
+      # ============================================================
+      # Step 1: 检出代码
+      # ============================================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ============================================================
+      # Step 2: 安装 NuGet CLI
+      # ============================================================
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      # ============================================================
+      # Step 3: 还原 WDK + SDK NuGet 包
+      # 还原到解决方案同级的 packages 目录，与 .vcxproj 中的
+      # ..\packages\ 相对路径保持一致
+      # ============================================================
+      - name: Restore WDK NuGet packages
+        run: |
+          nuget restore InfinityHookPro.sln -PackagesDirectory .\packages\ -Verbosity detailed
+
+      # ============================================================
+      # Step 4: MSBuild 加入 PATH
+      # windows-2022 已预装 VS 2022 + MSVC，无需安装 WDK
+      # ============================================================
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      # ============================================================
+      # Step 5: 编译驱动
+      # ============================================================
+      - name: Build driver
+        run: |
+          msbuild InfinityHookPro.sln `
+            /p:Configuration=${{ matrix.configuration }} `
+            /p:Platform=${{ matrix.platform }} `
+            /m `
+            /nologo `
+            /v:minimal
+
+      # ============================================================
+      # Step 6: 上传产物
+      # ============================================================
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: InfinityHookPro-${{ matrix.configuration }}-${{ matrix.platform }}
+          path: |
+            **/*.sys
+            **/*.inf
+          if-no-files-found: error
