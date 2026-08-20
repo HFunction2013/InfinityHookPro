@@ -1,11 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-
-  <!-- WDK NuGet: props 必须在 Microsoft.Cpp.Default.props 之前导入 -->
-  <ImportGroup Label="NuGetProps">
-    <Import Project="..\packages\Microsoft.Windows.WDK.x64.10.0.26100.1\build\native\Microsoft.Windows.WDK.x64.props" Condition="Exists('..\packages\Microsoft.Windows.WDK.x64.10.0.26100.1\build\native\Microsoft.Windows.WDK.x64.props')" />
-  </ImportGroup>
-
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -133,10 +127,4 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-
-  <!-- WDK NuGet: targets 必须在 Microsoft.Cpp.targets 之后导入 -->
-  <ImportGroup Label="NuGetTargets">
-    <Import Project="..\packages\Microsoft.Windows.WDK.x64.10.0.26100.1\build\native\Microsoft.Windows.WDK.x64.targets" Condition="Exists('..\packages\Microsoft.Windows.WDK.x64.10.0.26100.1\build\native\Microsoft.Windows.WDK.x64.targets')" />
-  </ImportGroup>
-
 </Project>

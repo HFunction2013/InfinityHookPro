@@ -24,33 +24,7 @@ jobs:
         uses: NuGet/setup-nuget@v2
 
       - name: Restore WDK NuGet packages
-        run: |
-          nuget restore InfinityHookPro.sln -PackagesDirectory .\packages\ -Verbosity detailed
-
-      # ============================================================
-      # 新增：安装 Windows SDK 10.0.26100（WDK NuGet 包要求此版本）
-      # windows-2022 预装的 SDK 通常是 22621/22000，没有 26100
-      # ============================================================
-      - name: Install Windows SDK 10.0.26100
-        shell: powershell
-        run: |
-          $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
-          $vsPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
-          Write-Host "Installing Windows 11 SDK 10.0.26100 via VS Installer..."
-          $p = Start-Process -FilePath $vsInstaller `
-            -ArgumentList @("modify", "--installPath", $vsPath, `
-              "--add", "Microsoft.VisualStudio.Component.Windows11SDK.26100", `
-              "--quiet", "--norestart", "--wait") `
-            -Wait -PassThru -NoNewWindow
-          Write-Host "VS Installer exit code: $($p.ExitCode)"
-          # 验证 SDK 是否安装成功
-          $sdkDir = "C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0"
-          if (Test-Path $sdkDir) {
-            Write-Host "SDK 10.0.26100.0 installed successfully at $sdkDir"
-          } else {
-            Write-Host "WARNING: SDK directory not found, listing available SDKs:"
-            Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
-          }
+        run: nuget restore InfinityHookPro.sln -PackagesDirectory .\packages\
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -60,9 +34,8 @@ jobs:
           msbuild InfinityHookPro.sln `
             /p:Configuration=${{ matrix.configuration }} `
             /p:Platform=${{ matrix.platform }} `
-            /m `
-            /nologo `
-            /v:minimal
+            /p:WindowsTargetPlatformVersion=10.0.22621.0 `
+            /m /nologo /v:minimal
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
