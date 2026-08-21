@@ -20,12 +20,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup NuGet
-        uses: NuGet/setup-nuget@v2
-
-      - name: Restore WDK NuGet packages
-        run: nuget restore InfinityHookPro.sln -PackagesDirectory .\packages\
-
       # ============================================================
       # 安装 Windows SDK 10.0.26100（WDK NuGet 包要求同版本 SDK）
       # 直接下载官方安装包静默安装，不走 VS Installer（避免传参问题）
