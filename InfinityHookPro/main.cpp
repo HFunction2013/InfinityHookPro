@@ -1,20 +1,30 @@
 #include "hook.hpp"
-
+typedef ULONG MINIPOWER_ACTION;
 // ============================================================================
-// NtShutdownSystem 相关类型定义
+// NtInitiatePowerAction 相关类型定义
 // ============================================================================
-typedef enum _SHUTDOWN_ACTION {
-    ShutdownNoReboot = 0,
-    ShutdownReboot   = 1,
-    ShutdownPowerOff = 2
-} SHUTDOWN_ACTION;
+typedef enum _POWER_ACTION {
+    PowerActionNone,
+    PowerActionReserved,
+    PowerActionSleep,
+    PowerActionHibernate,
+    PowerActionShutdown,
+    PowerActionShutdownReset,
+    PowerActionShutdownOff,
+    PowerActionWarmEject
+} POWER_ACTION;
 
-typedef NTSTATUS(NTAPI* PNT_SHUTDOWN_SYSTEM)(IN SHUTDOWN_ACTION ShutdownAction);
+typedef NTSTATUS(NTAPI* PNT_INITIATE_POWER_ACTION)(
+    IN POWER_ACTION SystemAction,
+    IN MINIPOWER_ACTION LightestSystemState,
+    IN ULONG Flags,
+    IN BOOLEAN Asynchronous
+);
 
 // ============================================================================
 // 全局变量
 // ============================================================================
-PNT_SHUTDOWN_SYSTEM g_OriginalNtShutdownSystem = NULL;
+PNT_INITIATE_POWER_ACTION g_OriginalNtInitiatePowerAction = NULL;
 
 // ============================================================================
 // 前向声明
@@ -22,41 +32,43 @@ PNT_SHUTDOWN_SYSTEM g_OriginalNtShutdownSystem = NULL;
 VOID DriverUnload(PDRIVER_OBJECT DriverObject);
 
 // ============================================================================
-// Fake 函数：拦截 NtShutdownSystem
+// Fake 函数：拦截 NtInitiatePowerAction
 // ============================================================================
-NTSTATUS NTAPI FakeNtShutdownSystem(IN SHUTDOWN_ACTION ShutdownAction)
+NTSTATUS NTAPI FakeNtInitiatePowerAction(
+    IN POWER_ACTION SystemAction,
+    IN MINIPOWER_ACTION LightestSystemState,
+    IN ULONG Flags,
+    IN BOOLEAN Asynchronous
+)
 {
-    // ---- 安全检查：以下情况直接放行，避免影响系统自身运行 ----
-    // 1) 非被动级别不能做太多事，直接调用原函数
-    // if (KeGetCurrentIrql() != PASSIVE_LEVEL)
-    //     return g_OriginalNtShutdownSystem(ShutdownAction);
+    // 拦截关机/重启/断电，其他放行
+    if (SystemAction == PowerActionShutdown ||
+        SystemAction == PowerActionShutdownReset ||
+        SystemAction == PowerActionShutdownOff)
+    {
+        DbgPrintEx(0, 0,
+                   "[IHP] Shutdown denied (action=%d, pid=%lu)\n",
+                   SystemAction,
+                   HandleToUlong(PsGetCurrentProcessId()));
+        return STATUS_ACCESS_DENIED;
+    }
 
-    // 2) 内核模式发起的关机（如系统自身流程）放行
-    //    如果你想连内核模式的关机也阻止，注释掉下面这行
-    // if (ExGetPreviousMode() == KernelMode)
-    //     return g_OriginalNtShutdownSystem(ShutdownAction);
-
-    // ---- 拦截的关机/重启 ----
-    DbgPrintEx(0, 0,
-               "[IHP] Shutdown denied (action=%d, pid=%lu)\n",
-               ShutdownAction,
-               HandleToUlong(PsGetCurrentProcessId()));
-
-    return STATUS_ACCESS_DENIED;
+    // 休眠/睡眠/其他 → 放行
+    return g_OriginalNtInitiatePowerAction(
+        SystemAction, LightestSystemState, Flags, Asynchronous);
 }
 
 // ============================================================================
 // InfinityHookPro 回调：每次系统调用时触发，决定是否替换函数指针
-// 注意：这不是修改 SSDT，而是修改栈上即将执行的系统调用指针
 // ============================================================================
 void __fastcall InfinityCallback(unsigned long nCallIndex, PVOID* pCallAddress)
 {
     UNREFERENCED_PARAMETER(nCallIndex);
 
     if (pCallAddress &&
-        *pCallAddress == (PVOID)g_OriginalNtShutdownSystem)
+        *pCallAddress == (PVOID)g_OriginalNtInitiatePowerAction)
     {
-        *pCallAddress = (PVOID)FakeNtShutdownSystem;
+        *pCallAddress = (PVOID)FakeNtInitiatePowerAction;
     }
 }
 
@@ -67,16 +79,15 @@ VOID DriverUnload(PDRIVER_OBJECT DriverObject)
 {
     UNREFERENCED_PARAMETER(DriverObject);
 
-    // 停止拦截（恢复所有系统调用走原始函数）
+    // 停止拦截
     KHook::Stop();
 
-    // 关键：等待所有执行点离开当前驱动，避免卸载后蓝屏
-    // 官方示例做法：倒计时 10 秒
+    // 等待所有执行点离开当前驱动
     for (ULONG i = 10; i > 0; i--)
     {
         DbgPrintEx(0, 0, "[DriverUnload] Countdown: %lu\n", i);
         LARGE_INTEGER interval;
-        interval.QuadPart = -1000 * 10000;  // 1 秒（单位：100ns，负数表示相对时间）
+        interval.QuadPart = -1000 * 10000;
         KeDelayExecutionThread(KernelMode, FALSE, &interval);
     }
 
@@ -92,25 +103,25 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
 
     DriverObject->DriverUnload = DriverUnload;
 
-    // 解析 NtShutdownSystem 地址
+    // 解析 NtInitiatePowerAction 地址
     UNICODE_STRING name;
-    RtlInitUnicodeString(&name, L"NtShutdownSystem");
-    g_OriginalNtShutdownSystem =
-        (PNT_SHUTDOWN_SYSTEM)MmGetSystemRoutineAddress(&name);
+    RtlInitUnicodeString(&name, L"NtInitiatePowerAction");
+    g_OriginalNtInitiatePowerAction =
+        (PNT_INITIATE_POWER_ACTION)MmGetSystemRoutineAddress(&name);
 
-    if (!g_OriginalNtShutdownSystem)
+    if (!g_OriginalNtInitiatePowerAction)
     {
-        DbgPrintEx(0, 0, "[DriverEntry] Failed to resolve NtShutdownSystem\n");
+        DbgPrintEx(0, 0, "[DriverEntry] Failed to resolve NtInitiatePowerAction\n");
         return STATUS_UNSUCCESSFUL;
     }
 
-    // 初始化 hook 框架（必须传入回调指针），然后开始拦截
+    // 初始化 hook 框架
     if (!KHook::Initialize(InfinityCallback) || !KHook::Start())
     {
         DbgPrintEx(0, 0, "[DriverEntry] KHook Initialize/Start failed\n");
         return STATUS_UNSUCCESSFUL;
     }
 
-    DbgPrintEx(0, 0, "[DriverEntry] NtShutdownSystem hook installed\n");
+    DbgPrintEx(0, 0, "[DriverEntry] NtInitiatePowerAction hook installed\n");
     return STATUS_SUCCESS;
 }
