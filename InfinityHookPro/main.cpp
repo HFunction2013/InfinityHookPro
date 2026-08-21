@@ -28,15 +28,15 @@ NTSTATUS NTAPI FakeNtShutdownSystem(IN SHUTDOWN_ACTION ShutdownAction)
 {
     // ---- 安全检查：以下情况直接放行，避免影响系统自身运行 ----
     // 1) 非被动级别不能做太多事，直接调用原函数
-    if (KeGetCurrentIrql() != PASSIVE_LEVEL)
-        return g_OriginalNtShutdownSystem(ShutdownAction);
+    // if (KeGetCurrentIrql() != PASSIVE_LEVEL)
+    //     return g_OriginalNtShutdownSystem(ShutdownAction);
 
     // 2) 内核模式发起的关机（如系统自身流程）放行
     //    如果你想连内核模式的关机也阻止，注释掉下面这行
-    if (ExGetPreviousMode() == KernelMode)
-        return g_OriginalNtShutdownSystem(ShutdownAction);
+    // if (ExGetPreviousMode() == KernelMode)
+    //     return g_OriginalNtShutdownSystem(ShutdownAction);
 
-    // ---- 拦截用户模式发起的关机/重启 ----
+    // ---- 拦截的关机/重启 ----
     DbgPrintEx(0, 0,
                "[IHP] Shutdown denied (action=%d, pid=%lu)\n",
                ShutdownAction,
