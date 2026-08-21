@@ -26,15 +26,41 @@ jobs:
       - name: Restore WDK NuGet packages
         run: nuget restore InfinityHookPro.sln -PackagesDirectory .\packages\
 
+      # ============================================================
+      # 安装 Windows SDK 10.0.26100（WDK NuGet 包要求同版本 SDK）
+      # 直接下载官方安装包静默安装，不走 VS Installer（避免传参问题）
+      # ============================================================
+      - name: Install Windows SDK 10.0.26100
+        shell: powershell
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $sdkUrl = "https://go.microsoft.com/fwlink/?linkid=2320455"
+          $sdkExe = Join-Path $env:TEMP "winsdksetup.exe"
+          Write-Host "Downloading Windows SDK 10.0.26100 ..."
+          Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkExe
+          Write-Host "Installing SDK silently ..."
+          $p = Start-Process -FilePath $sdkExe `
+            -ArgumentList "/features","+","/quiet","/norestart" `
+            -Wait -PassThru -NoNewWindow
+          Write-Host "SDK installer exit code: $($p.ExitCode)"
+          $ntifs = "C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\km\ntifs.h"
+          if (Test-Path $ntifs) {
+            Write-Host "OK: SDK 26100 + ntifs.h verified"
+          } else {
+            Write-Host "ERROR: ntifs.h not found. Available SDKs:"
+            Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Include" -ErrorAction SilentlyContinue | Select-Object Name
+            exit 1
+          }
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      # 注意：不再覆盖 WindowsTargetPlatformVersion，保持 WDK NuGet 默认的 26100
       - name: Build driver
         run: |
           msbuild InfinityHookPro.sln `
             /p:Configuration=${{ matrix.configuration }} `
             /p:Platform=${{ matrix.platform }} `
-            /p:WindowsTargetPlatformVersion=10.0.22621.0 `
             /m /nologo /v:minimal
 
       - name: Upload build artifacts
