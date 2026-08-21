@@ -3,16 +3,6 @@ typedef ULONG MINIPOWER_ACTION;
 // ============================================================================
 // NtInitiatePowerAction 相关类型定义
 // ============================================================================
-typedef enum _POWER_ACTION {
-    PowerActionNone,
-    PowerActionReserved,
-    PowerActionSleep,
-    PowerActionHibernate,
-    PowerActionShutdown,
-    PowerActionShutdownReset,
-    PowerActionShutdownOff,
-    PowerActionWarmEject
-} POWER_ACTION;
 
 typedef NTSTATUS(NTAPI* PNT_INITIATE_POWER_ACTION)(
     IN POWER_ACTION SystemAction,
