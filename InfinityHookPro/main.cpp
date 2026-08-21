@@ -36,11 +36,6 @@ NTSTATUS NTAPI FakeNtShutdownSystem(IN SHUTDOWN_ACTION ShutdownAction)
     if (ExGetPreviousMode() == KernelMode)
         return g_OriginalNtShutdownSystem(ShutdownAction);
 
-    // 3) 会话0（系统服务/系统进程）发起的关机放行
-    //    如果你想阻止所有会话，注释掉下面这行
-    if (PsGetProcessSessionId(IoGetCurrentProcess()) == 0)
-        return g_OriginalNtShutdownSystem(ShutdownAction);
-
     // ---- 拦截用户模式发起的关机/重启 ----
     DbgPrintEx(0, 0,
                "[IHP] Shutdown denied (action=%d, pid=%lu)\n",
