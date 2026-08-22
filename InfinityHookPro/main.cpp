@@ -56,6 +56,7 @@ void __fastcall InfinityCallback(unsigned long nCallIndex, PVOID* pCallAddress)
     UNREFERENCED_PARAMETER(nCallIndex);
 
     if (pCallAddress &&
+        *pCallAddress != (PVOID)FakeNtInitiatePowerAction &&  // 防止重复替换
         *pCallAddress == (PVOID)g_OriginalNtInitiatePowerAction)
     {
         *pCallAddress = (PVOID)FakeNtInitiatePowerAction;
@@ -93,7 +94,7 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
 
     DriverObject->DriverUnload = DriverUnload;
 
-    // 解析 NtInitiatePowerAction 地址
+    // 解析 NtInitiatePowerAction 地址 or Zw*
     UNICODE_STRING name;
     RtlInitUnicodeString(&name, L"NtInitiatePowerAction");
     g_OriginalNtInitiatePowerAction =
@@ -101,7 +102,18 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
 
     if (!g_OriginalNtInitiatePowerAction)
     {
-        DbgPrintEx(0, 0, "[DriverEntry] Failed to resolve NtInitiatePowerAction\n");
+        // 兜底：尝试 ZwInitiatePowerAction
+        RtlInitUnicodeString(&name, L"ZwInitiatePowerAction");
+        g_OriginalNtInitiatePowerAction =
+            (PNT_INITIATE_POWER_ACTION)MmGetSystemRoutineAddress(&name);
+        
+        DbgPrintEx(0, 0, "[DriverEntry] Fallback to ZwInitiatePowerAction: %p\n",
+                   g_OriginalNtInitiatePowerAction);
+    }
+
+    if (!g_OriginalNtInitiatePowerAction)
+    {
+        DbgPrintEx(0, 0, "[DriverEntry] Failed to resolve any InitiatePowerAction\n");
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -112,6 +124,7 @@ EXTERN_C NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING Regis
         return STATUS_UNSUCCESSFUL;
     }
 
-    DbgPrintEx(0, 0, "[DriverEntry] NtInitiatePowerAction hook installed\n");
+    DbgPrintEx(0, 0, "[DriverEntry] NtInitiatePowerAction hook installed (addr=%p)\n",
+               g_OriginalNtInitiatePowerAction);
     return STATUS_SUCCESS;
 }
